@@ -1,5 +1,5 @@
 // =====================================================================
-//  BALL VS KEEPER — السيرفر المحلي
+//  BALL VS KEEPER — سيرفر الويب (محلي أو Render)
 //  يقدّم ملفات اللعبة (dist/) ويدير غرف WebSocket بين الكونسل والتلفونات.
 //  السيرفر يمرّر المدخلات فقط؛ الفيزياء كلها تُحسب على شاشة الكونسل.
 //  التشغيل: npm install ثم npm run build ثم node server.js
@@ -30,7 +30,9 @@ function localIPs() {
 }
 const IPS = localIPs();
 const IP = IPS[0] || 'localhost';
-const BASE_URL = `http://${IP}:${PORT}`;
+// Render يوفّر رابط الخدمة العام عبر RENDER_EXTERNAL_URL.
+const BASE_URL = (process.env.RENDER_EXTERNAL_URL || `http://${IP}:${PORT}`).replace(/\/$/, '');
+const PUBLIC_PROTO = BASE_URL.startsWith('https://') ? 'wss' : 'ws';
 
 // ---------- تقديم الملفات الثابتة ----------
 const MIME = {
@@ -75,6 +77,11 @@ function resolveFile(urlPath) {
 
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (urlPath === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, service: 'BALL VS KEEPER' }));
+    return;
+  }
   if (urlPath === '/api/info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ip: IP, port: PORT, url: BASE_URL }));
@@ -226,7 +233,7 @@ setInterval(() => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n⚽🧤  BALL VS KEEPER — الكرة ضد الحارس');
   console.log('──────────────────────────────────────────');
-  console.log(`🖥️  افتح اللعبة على الشاشة الكبيرة:  ${BASE_URL}`);
+  console.log(`🖥️  رابط اللعبة العام:                 ${BASE_URL}`);
   console.log(`📱  رابط اليد للتلفون:              ${BASE_URL}/pad`);
   if (IPS.length > 1) console.log(`ℹ️   عناوين أخرى: ${IPS.slice(1).join(', ')}`);
   console.log(`💻  على نفس الجهاز:                http://localhost:${PORT}`);
