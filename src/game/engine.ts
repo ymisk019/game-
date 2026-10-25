@@ -3,14 +3,14 @@
 import * as THREE from 'three';
 import { audio } from './audio';
 import { AI, type AIView } from './ai';
-import { consumeAny, consumePause, getInput, pollGamepads, rumble, type PlayerInput } from './input';
-import { net } from './network';
+import { anyFor, consumeAny, consumePause, getInput, pollGamepads, rumble, type PlayerInput } from './input';
+import { net, type Slot } from './network';
 import {
   BALL_R, BALL_SPAWN, FIELD, GOAL_H, GOAL_W, GRAVITY, KEEPER_Z,
   computeShot, isGoal, isOut, stepBall, type Ball, type Sphere,
 } from './physics';
 import { buildBall, buildKeeper, buildWorld, P_COLORS, type KeeperModel, type World } from './scene';
-import type { Difficulty, Quality } from './settings';
+import type { BallStyle, Difficulty, GloveStyle, Quality } from './settings';
 
 export type Phase = 'idle' | 'countdown' | 'ready' | 'play' | 'outcome' | 'replay' | 'roundEnd' | 'gameOver';
 export type Outcome = 'goal' | 'save' | 'miss' | 'post';
@@ -76,7 +76,23 @@ export interface EngineCallbacks {
   onAutoQuality: (q: Quality) => void;
 }
 
+type Snd = typeof audio;
+const silent = new Proxy({}, { get: () => () => {} }) as Snd;
+
+export interface EngineOpts {
+  /** 0 = المباراة الأولى (لاعب 1 و2)، 2 = المباراة الثانية (لاعب 3 و4) */
+  slotBase: 0 | 2;
+}
+
 export class Engine {
+  slotBase: 0 | 2 = 0;
+  /** المحرك الأول فقط يشغّل الصوت ويقرأ الكيبورد/الإيقاف */
+  primary = true;
+  /** محرك آخر يتوقف ويكمل معه عند الإيقاف اليدوي (الشاشة المقسومة) */
+  linked: Engine | null = null;
+  private snd: Snd = audio;
+  private ro: ResizeObserver | null = null;
+  private canvasEl: HTMLCanvasElement;
   renderer: THREE.WebGLRenderer;
   camera: THREE.PerspectiveCamera;
   world: World;
@@ -178,8 +194,12 @@ export class Engine {
   syncTime = 0;
   disposed = false;
 
-  constructor(canvas: HTMLCanvasElement, quality: Quality, cb: EngineCallbacks) {
+  constructor(canvas: HTMLCanvasElement, quality: Quality, cb: EngineCallbacks, eo: EngineOpts = { slotBase: 0 }) {
     this.cb = cb;
+    this.canvasEl = canvas;
+    this.slotBase = eo.slotBase;
+    this.primary = eo.slotBase === 0;
+    this.snd = this.primary ? audio : silent;
     this.quality = quality;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== 'low', powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
@@ -230,43 +250,68 @@ export class Engine {
     this.applyQuality(quality);
     this.resize();
     window.addEventListener('resize', this.resize);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver(this.resize);
+      this.ro.observe(canvas);
+    }
 
-    // ربط أحداث الشبكة: إيقاف مؤقت عند انقطاع تلفون
-    net.onPadLost = (p) => {
-      if (!this.inMatch() || this.phase === 'gameOver') return;
-      if (this.opts.vsCpu && p.slot === 1) return;
-      this.lostIds.add(p.id);
-      this.pause('disconnect', p.slot);
-    };
-    net.onPadBack = (p) => {
-      this.lostIds.delete(p.id);
-      if (this.paused && this.pauseReason === 'disconnect' && this.lostIds.size === 0) this.resume();
-      this.syncPads(true);
-    };
-
-    net.onPadPause = () => {
-      if (!this.inMatch() || this.phase === 'gameOver') return;
-      if (this.paused) this.resume();
-      else this.pause('user');
-    };
+    // ربط أحداث الشبكة: إيقاف مؤقت عند انقطاع تلفون (فقط تلفونات هذه المباراة)
+    net.padLost.add(this.onPadLost);
+    net.padBack.add(this.onPadBack);
+    net.padPause.add(this.onPadPause);
 
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.loop);
   }
+
+  private mine(slot: number) {
+    return slot === this.slotBase || slot === this.slotBase + 1;
+  }
+
+  private onPadLost = (p: { id: string; slot: Slot }) => {
+    if (!this.mine(p.slot)) return;
+    if (!this.inMatch() || this.phase === 'gameOver') return;
+    if (this.opts.vsCpu && p.slot - this.slotBase === 1) return;
+    this.lostIds.add(p.id);
+    this.pause('disconnect', p.slot - this.slotBase);
+  };
+
+  private onPadBack = (p: { id: string; slot: Slot }) => {
+    if (!this.mine(p.slot)) return;
+    this.lostIds.delete(p.id);
+    if (this.paused && this.pauseReason === 'disconnect' && this.lostIds.size === 0) this.resume();
+    this.syncPads(true);
+  };
+
+  private onPadPause = (slot: Slot) => {
+    if (!this.mine(slot)) return;
+    if (!this.inMatch() || this.phase === 'gameOver') return;
+    if (this.paused) this.resume();
+    else this.pause('user');
+  };
 
   freshKeeper(): KeeperState {
     return { x: 0, y: 0, vx: 0, vy: 0, state: 'stand', diveDir: 1, diveT: 0, recT: 0, roll: 0, armUp: 0, cooldown: 0, high: false };
   }
 
   resize = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = this.canvasEl.clientWidth || window.innerWidth;
+    const h = this.canvasEl.clientHeight || window.innerHeight;
+    if (w < 2 || h < 2) return; // مخفي
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   };
 
   /** تطبيق مستوى الجودة: دقة البكسل، الظلال، عدد الجمهور، الجزيئات */
+  applyCustomization(ballStyle: BallStyle, gloveStyle: GloveStyle) {
+    const ballColors: Record<BallStyle, number> = { classic: 0xffffff, gold: 0xffd166, neon: 0x7cffd4, ocean: 0x7db8ff };
+    const gloveColors: Record<GloveStyle, number> = { yellow: 0xfef08a, white: 0xf8fafc, red: 0xfb7185, cyan: 0x67e8f9 };
+    const mat = this.ballMesh.material as THREE.MeshLambertMaterial;
+    mat.color.setHex(ballColors[ballStyle] ?? ballColors.classic);
+    this.keeper.gloveMat.color.setHex(gloveColors[gloveStyle] ?? gloveColors.yellow);
+  }
+
   applyQuality(q: Quality) {
     this.quality = q;
     const dpr = window.devicePixelRatio || 1;
@@ -310,8 +355,8 @@ export class Engine {
     this.resumeT = 0;
     this.celebrateT = 0;
     this.startRound();
-    audio.stopMusic();
-    audio.setCrowd(0.22);
+    this.snd.stopMusic();
+    this.snd.setCrowd(0.22);
   }
 
   startRound() {
@@ -348,7 +393,7 @@ export class Engine {
   }
 
   endRound() {
-    audio.whistle(true);
+    this.snd.whistle(true);
     this.phase = 'roundEnd';
     this.roundEndT = 3.2;
     this.charging = false;
@@ -376,12 +421,12 @@ export class Engine {
   gameOver(w: number) {
     this.phase = 'gameOver';
     this.winner = w;
-    audio.whistle(true);
-    window.setTimeout(() => audio.goal(), 900);
+    this.snd.whistle(true);
+    window.setTimeout(() => this.snd.goal(), 900);
     this.burst(new THREE.Vector3(0, 2, 2), P_COLORS[w], 1.4);
     this.celebrateT = 6;
     this.syncPads(true);
-    net.vibrate(w as 0 | 1, [200, 80, 200, 80, 400]);
+    net.vibrate((this.slotBase + w) as Slot, [200, 80, 200, 80, 400]);
   }
 
   afterAttempt() {
@@ -402,21 +447,41 @@ export class Engine {
 
   pause(reason: 'user' | 'disconnect', slot = -1) {
     if (!this.inMatch()) return;
+    if (reason === 'user' && this.linked && !this.paused) this.linked.pauseFromLink();
     this.paused = true;
     this.pauseReason = reason;
     this.lostSlot = slot;
-    audio.setCrowd(0.05);
+    this.snd.setCrowd(0.05);
+    this.emitHud(true);
+  }
+
+  /** يوقف/يكمل بدون إعادة نداء الشريك (تجنب حلقة لا نهائية) */
+  pauseFromLink() {
+    if (!this.inMatch() || this.paused) return;
+    this.paused = true;
+    this.pauseReason = 'user';
+    this.lostSlot = -1;
+    this.emitHud(true);
+  }
+
+  resumeFromLink() {
+    if (!this.paused || this.pauseReason !== 'user') return;
+    this.paused = false;
+    this.pauseReason = null;
+    const active = this.phase === 'play' || this.phase === 'ready' || this.phase === 'countdown';
+    this.resumeT = active && this.phase !== 'countdown' ? 3 : 0;
     this.emitHud(true);
   }
 
   resume() {
     if (!this.paused) return;
+    if (this.pauseReason === 'user' && this.linked) this.linked.resumeFromLink();
     this.paused = false;
     this.pauseReason = null;
     this.lostIds.clear();
     const active = this.phase === 'play' || this.phase === 'ready' || this.phase === 'countdown';
     this.resumeT = active && this.phase !== 'countdown' ? 3 : 0;
-    audio.setCrowd(0.22);
+    this.snd.setCrowd(0.22);
     this.emitHud(true);
   }
 
@@ -428,7 +493,7 @@ export class Engine {
     this.resumeT = 0;
     this.resetPositions();
     this.keeper.bodyMat.color.setHex(P_COLORS[1]);
-    audio.setCrowd(0.12);
+    this.snd.setCrowd(0.12);
     this.syncPads(true);
     this.emitHud(true);
   }
@@ -440,11 +505,11 @@ export class Engine {
     this.syncTime = now;
     const att = this.attacker;
     for (const s of [0, 1] as const) {
-      net.sendToSlot(s, {
+      net.sendToSlot((this.slotBase + s) as Slot, {
         t: 'state',
         role: this.phase === 'idle' ? 'lobby' : s === att ? 'ball' : 'keeper',
         score: this.scores,
-        me: s,
+        me: this.slotBase + s,
         phase: this.phase,
         timer: Math.ceil(this.timer),
       });
@@ -469,7 +534,7 @@ export class Engine {
     if (this.opts.vsCpu && slot === 1) {
       return role === 'ball' ? this.ai.ballInput(this.aiView(), dt) : this.ai.keeperInput(this.aiView(), dt);
     }
-    return getInput(slot);
+    return getInput((this.slotBase + slot) as Slot);
   }
 
   // ================= Physics: الحارس =================
@@ -563,14 +628,14 @@ export class Engine {
         this.power = 0;
         this.reticlePos.set(0, 1.0);
         this.reticle.visible = true;
-        audio.click();
+        this.snd.click();
       }
     } else {
       b.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.power = Math.min(1, this.power + dt / 1.1);
       this.chargeSoundT -= dt;
       if (this.chargeSoundT <= 0 && this.power < 1) {
-        audio.charge(this.power);
+        this.snd.charge(this.power);
         this.chargeSoundT = 0.08;
       }
       this.reticlePos.x = THREE.MathUtils.clamp(this.reticlePos.x + inp.x * 5.5 * dt, -GOAL_W / 2 - 1.2, GOAL_W / 2 + 1.2);
@@ -592,7 +657,7 @@ export class Engine {
       const sp = Math.hypot(b.vel.x, b.vel.z);
       this.touchSoundT -= dt * sp;
       if (sp > 1.5 && this.touchSoundT <= 0) {
-        audio.touch();
+        this.snd.touch();
         this.touchSoundT = 2.2;
       }
     }
@@ -618,10 +683,10 @@ export class Engine {
     this.shotPower = p;
     this.shotSimTime = this.simTime;
     this.shotCamX = this.camPos.x;
-    audio.kick(p);
+    this.snd.kick(p);
     const att = this.attacker;
-    net.vibrate(att, Math.round(40 + p * 80));
-    rumble(att, 0.4 + p * 0.6, 120);
+    net.vibrate((this.slotBase + att) as Slot, Math.round(40 + p * 80));
+    rumble((this.slotBase + att) as Slot, 0.4 + p * 0.6, 120);
     if (p > 0.8) this.slowT = 0.25;
   }
 
@@ -634,21 +699,21 @@ export class Engine {
       this.outT = 2.3;
       this.scores[att]++;
       this.goalSimTime = this.simTime;
-      audio.goal();
+      this.snd.goal();
       this.burst(new THREE.Vector3(this.ball.pos.x, 1.2, 0.5), P_COLORS[att], 1);
       this.rippleAmp = 0.5;
       this.rippleT = 0;
       this.ripple.set(this.ball.pos.x, this.ball.pos.y - GOAL_H / 2);
       this.celebrateT = 3;
       if (this.shotPower > 0.75) this.slowT = 0.6;
-      net.vibrate(att, [120, 60, 250]);
-      rumble(att, 1, 400);
+      net.vibrate((this.slotBase + att) as Slot, [120, 60, 250]);
+      rumble((this.slotBase + att) as Slot, 1, 400);
     } else {
       this.outT = 1.6;
       if (o === 'save') {
-        net.vibrate(kp, [80, 40, 120]);
-        rumble(kp, 0.8, 200);
-      } else audio.crowdSwell(0.35, 1.4);
+        net.vibrate((this.slotBase + kp) as Slot, [80, 40, 120]);
+        rumble((this.slotBase + kp) as Slot, 0.8, 200);
+      } else this.snd.crowdSwell(0.35, 1.4);
     }
     this.syncPads(true);
   }
@@ -668,13 +733,13 @@ export class Engine {
         const c = Math.ceil(this.cdT);
         if (c !== this.lastCd && c > 0) {
           this.lastCd = c;
-          audio.beep(false);
+          this.snd.beep(false);
         }
         if (this.cdT <= 0) {
           this.phase = 'play';
           this.goT = 0.8;
-          audio.beep(true);
-          audio.whistle();
+          this.snd.beep(true);
+          this.snd.whistle();
           this.syncPads(true);
         }
         break;
@@ -683,7 +748,7 @@ export class Engine {
         this.readyT -= dt;
         if (this.readyT <= 0) {
           this.phase = 'play';
-          audio.whistle();
+          this.snd.whistle();
         }
         break;
       }
@@ -707,16 +772,16 @@ export class Engine {
           }
         } else {
           const res = stepBall(this.ball, dt, this.spheres, this.kVel);
-          if (res.bounce > 2) audio.bounce(res.bounce);
+          if (res.bounce > 2) this.snd.bounce(res.bounce);
           if (res.post && !this.postHit) {
             this.postHit = true;
-            audio.post();
+            this.snd.post();
             this.shake = Math.max(this.shake, 0.15);
           }
           if (res.keeper && !this.keeperTouched) {
             this.keeperTouched = true;
             this.touchT = 0;
-            audio.save();
+            this.snd.save();
             this.shake = 0.4;
           }
           if (playing) {
@@ -789,7 +854,7 @@ export class Engine {
     this.replayT = this.replayStart;
     this.replayReal = 0;
     this.phase = 'replay';
-    consumeAny();
+    if (this.primary) consumeAny();
     this.emitHud(true);
   }
 
@@ -809,7 +874,7 @@ export class Engine {
     this.ball.pos.set(r[i + 1], r[i + 2], r[i + 3]);
     this.ballMesh.quaternion.set(r[i + 4], r[i + 5], r[i + 6], r[i + 7]);
     this.applyKeeperVisual(r[i + 8], r[i + 9], r[i + 10], r[i + 11]);
-    const skip = this.replayReal > 0.6 && consumeAny();
+    const skip = this.replayReal > 0.6 && (this.primary ? consumeAny() : anyFor(this.slotBase));
     if (this.replayT >= this.replayEnd || skip) this.afterAttempt();
   }
 
@@ -1020,7 +1085,7 @@ export class Engine {
     this.raf = requestAnimationFrame(this.loop);
     const realDt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    pollGamepads(this.inLobby);
+    if (this.primary) pollGamepads(this.inLobby);
 
     // قياس الأداء وخفض الجودة تلقائياً
     this.fpsFrames++;
@@ -1040,7 +1105,7 @@ export class Engine {
       } else this.lowStreak = 0;
     }
 
-    if (consumePause() && this.inMatch() && this.phase !== 'gameOver') {
+    if (this.primary && consumePause() && this.inMatch() && this.phase !== 'gameOver') {
       if (this.paused) this.resume();
       else this.pause('user');
     }
@@ -1071,8 +1136,10 @@ export class Engine {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize);
-    net.onPadLost = null;
-    net.onPadBack = null;
+    this.ro?.disconnect();
+    net.padLost.delete(this.onPadLost);
+    net.padBack.delete(this.onPadBack);
+    net.padPause.delete(this.onPadPause);
     this.renderer.dispose();
   }
 }

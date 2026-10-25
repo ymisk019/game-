@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "game": "node server.js --auto --open",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
+    "mobile:prepare": "node scripts/prepare-mobile.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

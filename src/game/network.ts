@@ -10,11 +10,13 @@ export interface PadInput {
   dive: boolean;
 }
 
+export type Slot = 0 | 1 | 2 | 3;
+
 export interface PadInfo {
   id: string;
   name: string;
   connected: boolean;
-  slot: 0 | 1; // اللاعب 1 أو 2
+  slot: Slot; // اللاعب 1..4 (المباراة الأولى: 0 و1 — الثانية: 2 و3)
   input: PadInput;
   lastSeen: number;
 }
@@ -33,11 +35,14 @@ class Network {
   listeners = new Set<() => void>();
   retry = 0;
   started = false;
-  onPadLost: ((p: PadInfo) => void) | null = null;
-  onPadBack: ((p: PadInfo) => void) | null = null;
-  onPadPause: (() => void) | null = null;
+  /** مستمعون متعددون لأن الشاشة المقسومة فيها محركان */
+  padLost = new Set<(p: PadInfo) => void>();
+  padBack = new Set<(p: PadInfo) => void>();
+  padPause = new Set<(slot: Slot) => void>();
+  /** تنقل في القوائم من التلفون: up/down/ok/back */
+  navListeners = new Set<(k: string) => void>();
   /** يحدد الكونسل أي لاعب يأخذ التلفون الجديد */
-  pickSlot: ((pref: 'ball' | 'keeper' | null) => 0 | 1) | null = null;
+  pickSlot: ((pref: 'ball' | 'keeper' | null) => Slot) | null = null;
 
   start() {
     if (this.started) return;
@@ -95,7 +100,7 @@ class Network {
         if (p.connected) {
           p.connected = false;
           p.input = emptyInput();
-          this.onPadLost?.(p);
+          this.padLost.forEach((f) => f(p));
         }
       });
       this.emit();
@@ -128,7 +133,7 @@ class Network {
         let p = this.pads.get(id);
         const pref = (m.role as 'ball' | 'keeper' | null) ?? null;
         if (!p) {
-          const slot = this.pickSlot ? this.pickSlot(pref) : 0;
+          const slot: Slot = this.pickSlot ? this.pickSlot(pref) : 0;
           p = { id, name: String(m.name || 'Phone'), connected: true, slot, input: emptyInput(), lastSeen: performance.now() };
           this.pads.set(id, p);
         } else {
@@ -136,7 +141,10 @@ class Network {
           p.connected = true;
           p.name = String(m.name || p.name);
           p.lastSeen = performance.now();
-          if (wasLost) this.onPadBack?.(p);
+          if (wasLost) {
+            const back = p;
+            this.padBack.forEach((f) => f(back));
+          }
         }
         this.sendTo(id, { t: 'slot', slot: p.slot });
         this.emit();
@@ -147,7 +155,7 @@ class Network {
         if (p) {
           p.connected = false;
           p.input = emptyInput();
-          this.onPadLost?.(p);
+          this.padLost.forEach((f) => f(p));
           this.emit();
         }
         break;
@@ -165,7 +173,13 @@ class Network {
         break;
       }
       case 'pause': {
-        this.onPadPause?.();
+        const p = this.pads.get(String(m.id));
+        if (p) this.padPause.forEach((f) => f(p.slot));
+        break;
+      }
+      case 'nav': {
+        const k = String(m.k);
+        this.navListeners.forEach((f) => f(k));
         break;
       }
       case 'role': {
@@ -181,7 +195,7 @@ class Network {
     }
   }
 
-  setPadSlot(id: string, slot: 0 | 1) {
+  setPadSlot(id: string, slot: Slot) {
     const p = this.pads.get(id);
     if (!p) return;
     p.slot = slot;
@@ -199,7 +213,7 @@ class Network {
   }
 
   /** إرسال لكل تلفونات لاعب معين */
-  sendToSlot(slot: 0 | 1, msg: Record<string, unknown>) {
+  sendToSlot(slot: Slot, msg: Record<string, unknown>) {
     this.pads.forEach((p) => {
       if (p.slot === slot && p.connected) this.sendTo(p.id, msg);
     });
@@ -209,7 +223,7 @@ class Network {
     this.pads.forEach((p) => p.connected && this.sendTo(p.id, msg));
   }
 
-  vibrate(slot: 0 | 1, pattern: number | number[]) {
+  vibrate(slot: Slot, pattern: number | number[]) {
     this.sendToSlot(slot, { t: 'vib', p: pattern });
   }
 }

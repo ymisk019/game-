@@ -1,7 +1,7 @@
 // ===================== UI: عناصر مشتركة =====================
 import type { ReactNode } from 'react';
 
-export const P_HEX = ['#f97316', '#3b82f6'];
+export const P_HEX = ['#f97316', '#3b82f6', '#22c55e', '#e879f9'];
 
 export function Btn({
   children,

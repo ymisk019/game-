@@ -11,6 +11,8 @@ export function Hud({
   onResume,
   onQuit,
   onRestart,
+  slotBase = 0,
+  label,
 }: {
   h: HudT;
   s: Settings;
@@ -18,9 +20,14 @@ export function Hud({
   onResume: () => void;
   onQuit: () => void;
   onRestart: () => void;
+  /** 0 للمباراة الأولى، 2 للمباراة الثانية في الشاشة المقسومة */
+  slotBase?: 0 | 2;
+  label?: string;
 }) {
   const L = s.lang;
-  const name = (slot: number) => (h.vsCpu && slot === 1 ? `🤖 ${t(L, 'cpu')}` : t(L, slot === 0 ? 'player1' : 'player2'));
+  const names = ['player1', 'player2', 'player3', 'player4'] as const;
+  const hex = (slot: number) => (slot < 0 ? undefined : P_HEX[slotBase + slot]);
+  const name = (slot: number) => (h.vsCpu && slot === 1 ? `🤖 ${t(L, 'cpu')}` : t(L, names[slotBase + slot] ?? 'player1'));
   const att = h.attacker;
   const kp = 1 - att;
   const roleIcon = (slot: number) => (slot === att ? '⚽' : '🧤');
@@ -35,6 +42,7 @@ export function Hud({
 
   const hint = (slot: number) => {
     if (h.vsCpu && slot === 1) return null;
+    if (slotBase === 2) return '🎮 📱';
     const isBall = slot === att;
     if (slot === 0) return isBall ? 'WASD · Space ⏺' : 'A/D · Space ⤒ · E ↘';
     return isBall ? '←↑→↓ · Enter ⏺' : '←→ · Enter ⤒ · Shift ↘';
@@ -46,9 +54,9 @@ export function Hud({
       <div className="absolute inset-x-0 top-3 flex justify-center px-2">
         <div className="flex items-stretch overflow-hidden rounded-2xl border border-white/15 bg-slate-950/80 shadow-2xl backdrop-blur" dir="ltr">
           {[0, 1].map((slot) => (
-            <div key={slot} className={`flex items-center gap-3 px-4 py-2 sm:px-6 ${slot === 1 ? 'order-3' : ''}`} style={{ background: `${P_HEX[slot]}33` }}>
+            <div key={slot} className={`flex items-center gap-3 px-4 py-2 sm:px-6 ${slot === 1 ? 'order-3' : ''}`} style={{ background: `${hex(slot)}33` }}>
               <div className={`text-center ${slot === 1 ? 'order-2' : ''}`}>
-                <div className="text-sm font-bold opacity-90 sm:text-lg" style={{ color: P_HEX[slot] }}>
+                <div className="text-sm font-bold opacity-90 sm:text-lg" style={{ color: hex(slot) }}>
                   {roleIcon(slot)} {name(slot)}
                 </div>
               </div>
@@ -75,14 +83,14 @@ export function Hud({
         ⏸️
       </button>
       <div className="absolute start-3 top-3 rounded-lg bg-black/40 px-2 py-1 font-mono text-xs text-slate-300">
-        {h.fps} {t(L, 'fps')}
+        {label ? `${label} · ` : ''}{h.fps} {t(L, 'fps')}
       </div>
 
       {/* أشرطة القوة والغطس */}
       {(h.phase === 'play' || h.phase === 'ready') && (
         <div className="absolute inset-x-0 bottom-4 flex flex-wrap items-end justify-center gap-4 px-3">
           <div className="w-64 rounded-2xl bg-slate-950/75 p-3 backdrop-blur">
-            <div className="mb-1 flex justify-between text-sm font-bold" style={{ color: P_HEX[att] }}>
+            <div className="mb-1 flex justify-between text-sm font-bold" style={{ color: hex(att) }}>
               <span>⚽ {t(L, 'power')}</span>
               <span className="font-mono text-slate-300">{hint(att)}</span>
             </div>
@@ -98,14 +106,14 @@ export function Hud({
             </div>
           </div>
           <div className="w-64 rounded-2xl bg-slate-950/75 p-3 backdrop-blur">
-            <div className="mb-1 flex justify-between text-sm font-bold" style={{ color: P_HEX[kp] }}>
+            <div className="mb-1 flex justify-between text-sm font-bold" style={{ color: hex(kp) }}>
               <span>🧤 {t(L, 'diveCd')}</span>
               <span className="font-mono text-slate-300">{hint(kp)}</span>
             </div>
             <div className="h-5 overflow-hidden rounded-full bg-white/10" dir="ltr">
               <div
                 className="h-full rounded-full transition-[width] duration-75"
-                style={{ width: `${(1 - h.diveCd) * 100}%`, background: h.diveCd > 0 ? '#64748b' : P_HEX[kp] }}
+                style={{ width: `${(1 - h.diveCd) * 100}%`, background: h.diveCd > 0 ? '#64748b' : hex(kp) }}
               />
             </div>
           </div>
@@ -117,9 +125,9 @@ export function Hud({
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {h.phase === 'countdown' && (
             <div className="mb-4 rounded-2xl bg-slate-950/70 px-6 py-3 text-center text-2xl font-bold">
-              <span style={{ color: P_HEX[att] }}>⚽ {name(att)}</span>
+              <span style={{ color: hex(att) }}>⚽ {name(att)}</span>
               <span className="mx-3 text-slate-400">vs</span>
-              <span style={{ color: P_HEX[kp] }}>🧤 {name(kp)}</span>
+              <span style={{ color: hex(kp) }}>🧤 {name(kp)}</span>
               {h.golden && <div className="mt-1 text-lg text-amber-300">{t(L, 'goldenGoalHint')}</div>}
             </div>
           )}
@@ -165,9 +173,9 @@ export function Hud({
           <Panel className="bvk-pop text-center">
             <div className="text-4xl font-black text-amber-300">{t(L, 'roundOver')}</div>
             <div className="my-4 flex items-center justify-center gap-6 text-6xl font-black" dir="ltr">
-              <span style={{ color: P_HEX[0] }}>{h.scores[0]}</span>
+              <span style={{ color: hex(0) }}>{h.scores[0]}</span>
               <span className="text-slate-500">-</span>
-              <span style={{ color: P_HEX[1] }}>{h.scores[1]}</span>
+              <span style={{ color: hex(1) }}>{h.scores[1]}</span>
             </div>
             <div className="text-2xl text-slate-200">🔄 {t(L, 'nextRound')}</div>
           </Panel>
@@ -180,13 +188,13 @@ export function Hud({
           <Panel className="bvk-pop w-full max-w-lg text-center">
             <div className="text-6xl">🏆</div>
             <div className="text-2xl font-bold text-slate-300">{t(L, 'winner')}</div>
-            <div className="my-2 text-6xl font-black" style={{ color: P_HEX[h.winner] ?? '#fff' }}>
+            <div className="my-2 text-6xl font-black" style={{ color: hex(h.winner) ?? '#fff' }}>
               {name(h.winner)}
             </div>
             <div className="my-3 flex items-center justify-center gap-6 text-5xl font-black" dir="ltr">
-              <span style={{ color: P_HEX[0] }}>{h.scores[0]}</span>
+              <span style={{ color: hex(0) }}>{h.scores[0]}</span>
               <span className="text-slate-500">-</span>
-              <span style={{ color: P_HEX[1] }}>{h.scores[1]}</span>
+              <span style={{ color: hex(1) }}>{h.scores[1]}</span>
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Btn autoFocus onClick={onRestart}>🔁 {t(L, 'playAgain')}</Btn>
@@ -204,7 +212,7 @@ export function Hud({
               <>
                 <div className="text-6xl">📵</div>
                 <div className="mt-2 text-3xl font-black text-rose-300">{t(L, 'controllerLost')}</div>
-                <div className="mt-1 text-xl" style={{ color: P_HEX[h.lostSlot] ?? '#fff' }}>
+                <div className="mt-1 text-xl" style={{ color: hex(h.lostSlot) ?? '#fff' }}>
                   {h.lostSlot >= 0 ? name(h.lostSlot) : ''}
                 </div>
                 <div className="mt-3 animate-pulse text-xl text-slate-300">{t(L, 'waitingReconnect')}</div>

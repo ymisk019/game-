@@ -1,9 +1,9 @@
 // ===================== UI: القائمة والتعليمات والإعدادات =====================
 import { t } from '../game/i18n';
-import type { Difficulty, Quality, Settings } from '../game/settings';
+import type { BallStyle, Difficulty, GloveStyle, Quality, Settings } from '../game/settings';
 import { Btn, GamepadArt, Key, Panel, PhoneArt } from './common';
 
-export function MainMenu({ s, onPlay, onHow, onSettings, onLang }: { s: Settings; onPlay: () => void; onHow: () => void; onSettings: () => void; onLang: () => void }) {
+export function MainMenu({ s, onPlay, onHow, onShop, onSettings, onLang }: { s: Settings; onPlay: () => void; onHow: () => void; onShop: () => void; onSettings: () => void; onLang: () => void }) {
   const L = s.lang;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-8 p-6">
@@ -18,6 +18,7 @@ export function MainMenu({ s, onPlay, onHow, onSettings, onLang }: { s: Settings
       <div className="flex w-full max-w-sm flex-col gap-4">
         <Btn autoFocus onClick={onPlay} className="py-5 text-3xl">▶ {t(L, 'play')}</Btn>
         <Btn variant="ghost" onClick={onHow} className="text-2xl">📖 {t(L, 'howto')}</Btn>
+        <Btn variant="ghost" onClick={onShop} className="text-2xl">🛍️ {L === 'ar' ? 'المتجر' : 'Shop'}</Btn>
         <Btn variant="ghost" onClick={onSettings} className="text-2xl">⚙️ {t(L, 'settings')}</Btn>
         <Btn variant="soft" onClick={onLang} className="text-xl">🌐 {L === 'ar' ? 'English' : 'العربية'}</Btn>
       </div>
@@ -83,9 +84,38 @@ export function SettingsScreen({ s, onChange, onBack }: { s: Settings; onChange:
         <Row label={`🤖 ${t(L, 'difficulty')}`}>
           <Choice<Difficulty> value={s.difficulty} options={['easy', 'normal', 'hard']} labels={(v) => t(L, v)} onChange={(v) => onChange({ difficulty: v })} />
         </Row>
+        <Row label={L === 'ar' ? '⚽ شكل الكرة' : '⚽ Ball skin'}>
+          <Choice<BallStyle> value={s.ballStyle} options={s.ownedBallStyles} labels={(v) => ({ classic: L === 'ar' ? 'كلاسيكية' : 'Classic', gold: L === 'ar' ? 'ذهبية' : 'Gold', neon: 'Neon', ocean: L === 'ar' ? 'محيط' : 'Ocean' }[v])} onChange={(v) => onChange({ ballStyle: v })} />
+        </Row>
+        <Row label={L === 'ar' ? '🧤 لون القفازات' : '🧤 Glove color'}>
+          <Choice<GloveStyle> value={s.gloveStyle} options={s.ownedGloveStyles} labels={(v) => ({ yellow: L === 'ar' ? 'أصفر' : 'Yellow', white: L === 'ar' ? 'أبيض' : 'White', red: L === 'ar' ? 'أحمر' : 'Red', cyan: 'Cyan' }[v])} onChange={(v) => onChange({ gloveStyle: v })} />
+        </Row>
         <div className="mt-6 flex justify-center">
           <Btn autoFocus onClick={onBack}>{t(L, 'back')}</Btn>
         </div>
+      </Panel>
+    </div>
+  );
+}
+
+export function ShopScreen({ s, onChange, onBack }: { s: Settings; onChange: (p: Partial<Settings>) => void; onBack: () => void }) {
+  const L = s.lang;
+  return (
+    <div className="flex h-full items-center justify-center overflow-y-auto p-4">
+      <Panel className="w-full max-w-3xl">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-4xl font-black text-amber-300">🛍️ {L === 'ar' ? 'المتجر' : 'Shop'}</h2>
+          <span className="rounded-full bg-amber-300/15 px-4 py-2 text-lg font-black text-amber-100">🪙 {s.coins}</span>
+        </div>
+        <p className="mb-5 text-slate-300">{L === 'ar' ? 'اشترِ مظاهر جديدة للكرة والقفازات باستخدام العملات التي تجمعها من المباريات.' : 'Unlock new ball and glove styles using coins earned from matches.'}</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([['ball','gold',100],['ball','neon',150],['ball','ocean',120],['glove','white',60],['glove','red',80],['glove','cyan',100]] as const).map(([kind, style, price]) => {
+            const owned = kind === 'ball' ? s.ownedBallStyles.includes(style as BallStyle) : s.ownedGloveStyles.includes(style as GloveStyle);
+            const label = ({ gold: L === 'ar' ? 'كرة ذهبية' : 'Gold ball', neon: 'Neon ball', ocean: L === 'ar' ? 'كرة المحيط' : 'Ocean ball', white: L === 'ar' ? 'قفازات بيضاء' : 'White gloves', red: L === 'ar' ? 'قفازات حمراء' : 'Red gloves', cyan: 'Cyan gloves' } as Record<string,string>)[style];
+            return <div key={`${kind}-${style}`} className="flex items-center justify-between gap-2 rounded-xl bg-slate-950/60 p-3"><span className="font-bold">{kind === 'ball' ? '⚽' : '🧤'} {label}</span><button data-nav disabled={owned || s.coins < price} onClick={() => onChange(kind === 'ball' ? { coins: s.coins-price, ownedBallStyles: [...s.ownedBallStyles, style as BallStyle], ballStyle: style as BallStyle } : { coins: s.coins-price, ownedGloveStyles: [...s.ownedGloveStyles, style as GloveStyle], gloveStyle: style as GloveStyle })} className={`rounded-lg px-3 py-2 text-sm font-extrabold ${owned ? 'bg-emerald-500/20 text-emerald-200' : s.coins < price ? 'bg-white/5 text-slate-500' : 'bg-amber-400 text-slate-950'}`}>{owned ? (L === 'ar' ? 'مملوك' : 'Owned') : `🪙 ${price}`}</button></div>;
+          })}
+        </div>
+        <div className="mt-6 flex justify-center"><Btn autoFocus onClick={onBack}>{t(L, 'back')}</Btn></div>
       </Panel>
     </div>
   );

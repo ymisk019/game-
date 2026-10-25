@@ -1,7 +1,7 @@
 // ===================== المدخلات (Input) =====================
 // كيبورد + يد بلايستيشن/إكسبوكس (Gamepad API) + تلفون (عبر الشبكة)
 // كل لاعب يمكنه استخدام أي جهاز، والمدخلات تُدمج لكل لاعب.
-import { net } from './network';
+import { net, type Slot } from './network';
 
 export interface PlayerInput {
   x: number; // -1 يسار .. 1 يمين (من منظور المهاجم)
@@ -18,7 +18,18 @@ let anyPressed = false;
 let pausePressed = false;
 
 // ربط يد التحكم باللاعب: index -> slot
-export const gamepadSlots = new Map<number, 0 | 1>();
+export const gamepadSlots = new Map<number, Slot>();
+
+/** عدد اللاعبين النشطين: 2 عادي، 4 في الشاشة المقسومة */
+export let maxPlayers = 2;
+export function setMaxPlayers(n: 2 | 4) {
+  maxPlayers = n;
+  // أي يد كانت على لاعب غير متاح ترجع للاعب 1
+  gamepadSlots.forEach((sl, idx) => {
+    if (sl >= n) gamepadSlots.set(idx, 0);
+  });
+  emitPads();
+}
 const prevPadButtons = new Map<number, boolean[]>();
 let gamepadListeners = new Set<() => void>();
 
@@ -55,7 +66,8 @@ export function initInput() {
 
 const k = (c: string) => (keys.has(c) ? 1 : 0);
 
-function keyboardInput(slot: 0 | 1): PlayerInput {
+function keyboardInput(slot: Slot): PlayerInput {
+  if (slot >= 2) return emptyInput();
   if (slot === 0) {
     return {
       x: k('KeyD') - k('KeyA'),
@@ -92,18 +104,26 @@ export function pollGamepads(inLobby: boolean) {
     if (now.some((b, i) => b && !prev[i])) anyPressed = true;
     if (pressed(9) || pressed(8)) pausePressed = true;
     if (!gamepadSlots.has(gp.index) && now.some((b) => b)) {
-      // انضمام: أول يد للاعب 1، الثانية للاعب 2
+      // انضمام: أول مكان فارغ (اللاعب 1، ثم 2، ثم 3، ثم 4)
       const used = new Set(gamepadSlots.values());
-      gamepadSlots.set(gp.index, used.has(0) && !used.has(1) ? 1 : 0);
+      let pick: Slot = 0;
+      for (let i = 0; i < maxPlayers; i++) {
+        if (!used.has(i as Slot)) {
+          pick = i as Slot;
+          break;
+        }
+      }
+      gamepadSlots.set(gp.index, pick);
       emitPads();
     }
     if (inLobby && gamepadSlots.has(gp.index)) {
-      if (pressed(14)) {
-        gamepadSlots.set(gp.index, 0);
+      const cur = gamepadSlots.get(gp.index) as Slot;
+      if (pressed(14) && cur > 0) {
+        gamepadSlots.set(gp.index, (cur - 1) as Slot);
         emitPads();
       }
-      if (pressed(15)) {
-        gamepadSlots.set(gp.index, 1);
+      if (pressed(15) && cur < maxPlayers - 1) {
+        gamepadSlots.set(gp.index, (cur + 1) as Slot);
         emitPads();
       }
     }
@@ -111,7 +131,7 @@ export function pollGamepads(inLobby: boolean) {
   }
 }
 
-function gamepadInput(slot: 0 | 1, out: PlayerInput) {
+function gamepadInput(slot: Slot, out: PlayerInput) {
   for (const gp of getGamepads()) {
     if (gamepadSlots.get(gp.index) !== slot) continue;
     const b = (i: number) => !!gp.buttons[i]?.pressed;
@@ -129,7 +149,7 @@ function gamepadInput(slot: 0 | 1, out: PlayerInput) {
   }
 }
 
-function phoneInput(slot: 0 | 1, out: PlayerInput) {
+function phoneInput(slot: Slot, out: PlayerInput) {
   net.pads.forEach((p) => {
     if (p.slot !== slot || !p.connected) return;
     if (Math.abs(p.input.x) > Math.abs(out.x)) out.x = p.input.x;
@@ -141,7 +161,7 @@ function phoneInput(slot: 0 | 1, out: PlayerInput) {
 }
 
 /** المدخلات المدموجة لكل لاعب من كل الأجهزة */
-export function getInput(slot: 0 | 1): PlayerInput {
+export function getInput(slot: Slot): PlayerInput {
   const out = keyboardInput(slot);
   gamepadInput(slot, out);
   phoneInput(slot, out);
@@ -164,6 +184,19 @@ export function consumeAny() {
   return a;
 }
 
+/** نسخة للمحرك الثاني: تفحص فقط أيدي وتلفونات لاعبيه */
+export function anyFor(base: 0 | 2): boolean {
+  let a = false;
+  net.pads.forEach((p) => {
+    if (p.connected && (p.slot === base || p.slot === base + 1) && (p.input.shoot || p.input.jump || p.input.dive)) a = true;
+  });
+  for (const gp of getGamepads()) {
+    const sl = gamepadSlots.get(gp.index);
+    if ((sl === base || sl === base + 1) && gp.buttons.some((b) => b.pressed)) a = true;
+  }
+  return a;
+}
+
 export function consumePause() {
   const p = pausePressed;
   pausePressed = false;
@@ -171,7 +204,7 @@ export function consumePause() {
 }
 
 /** اهتزاز يد التحكم إن كانت تدعمه */
-export function rumble(slot: 0 | 1, strong: number, ms: number) {
+export function rumble(slot: Slot, strong: number, ms: number) {
   for (const gp of getGamepads()) {
     if (gamepadSlots.get(gp.index) !== slot) continue;
     const act = (gp as unknown as { vibrationActuator?: { playEffect: (t: string, o: object) => Promise<unknown> } }).vibrationActuator;

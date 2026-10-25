@@ -2,29 +2,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { audio } from './game/audio';
 import { Engine, type Hud as HudT } from './game/engine';
-import { initInput, getGamepads, gamepadSlots } from './game/input';
-import { net } from './game/network';
+import { initInput, getGamepads, gamepadSlots, setMaxPlayers } from './game/input';
+import { net, type Slot } from './game/network';
+import { t } from './game/i18n';
 import { loadSettings, saveSettings, type Settings } from './game/settings';
 import { Hud } from './ui/Hud';
 import { Lobby } from './ui/Lobby';
-import { HowTo, MainMenu, SettingsScreen } from './ui/screens';
+import { HowTo, MainMenu, SettingsScreen, ShopScreen } from './ui/screens';
 
-type Screen = 'menu' | 'howto' | 'settings' | 'lobby' | 'game';
+type Screen = 'menu' | 'howto' | 'settings' | 'shop' | 'lobby' | 'game';
 
 let inputReady = false;
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvas2Ref = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
+  const engine2Ref = useRef<Engine | null>(null);
+  const rewardedRef = useRef(false);
   const [s, setS] = useState<Settings>(loadSettings);
   const [screen, setScreen] = useState<Screen>('menu');
   const [hud, setHud] = useState<HudT | null>(null);
+  const [hud2, setHud2] = useState<HudT | null>(null);
   const [vsCpu, setVsCpu] = useState(false);
+  const [split, setSplit] = useState(false);
   const [startBall, setStartBall] = useState<0 | 1>(0);
+  const [matchMode, setMatchMode] = useState<'classic' | 'challenge' | 'tournament'>('classic');
   const startBallRef = useRef(startBall);
   const vsCpuRef = useRef(vsCpu);
+  const splitRef = useRef(split);
   startBallRef.current = startBall;
   vsCpuRef.current = vsCpu;
+  splitRef.current = split;
 
   // ===== تهيئة المحرك مرة واحدة =====
   useEffect(() => {
@@ -40,11 +49,18 @@ export default function App() {
     // اختيار اللاعب للتلفون الجديد حسب الدور المطلوب
     net.pickSlot = (pref) => {
       if (vsCpuRef.current) return 0;
-      if (pref === 'ball') return startBallRef.current;
-      if (pref === 'keeper') return (1 - startBallRef.current) as 0 | 1;
-      const c = [0, 0];
-      net.pads.forEach((p) => p.connected && c[p.slot]++);
-      return c[0] <= c[1] ? 0 : 1;
+      const n = splitRef.current ? 4 : 2;
+      const sb = startBallRef.current;
+      const cands: Slot[] = [];
+      for (let m = 0; m < n; m += 2) {
+        if (pref === 'ball') cands.push((m + sb) as Slot);
+        else if (pref === 'keeper') cands.push((m + 1 - sb) as Slot);
+        else cands.push(m as Slot, (m + 1) as Slot);
+      }
+      const count = (sl: Slot) => Array.from(net.pads.values()).filter((p) => p.connected && p.slot === sl).length;
+      let best = cands[0];
+      for (const c of cands) if (count(c) < count(best)) best = c;
+      return best;
     };
     net.start();
     // تشغيل الصوت بعد أول تفاعل
@@ -65,6 +81,26 @@ export default function App() {
     };
   }, []);
 
+  // ===== المحرك الثاني (شاشة مقسومة لـ4 لاعبين) =====
+  useEffect(() => {
+    setMaxPlayers(split ? 4 : 2);
+    if (!split || !canvas2Ref.current || !engineRef.current) return;
+    const first = engineRef.current;
+    const eng2 = new Engine(canvas2Ref.current, loadSettings().quality, { onHud: setHud2, onAutoQuality: () => {} }, { slotBase: 2 });
+    eng2.autoQuality = false;
+    eng2.applyCustomization(s.ballStyle, s.gloveStyle);
+    first.linked = eng2;
+    eng2.linked = first;
+    engine2Ref.current = eng2;
+    return () => {
+      eng2.dispose();
+      engine2Ref.current = null;
+      first.linked = null;
+      setHud2(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [split]);
+
   // ===== حفظ وتطبيق الإعدادات =====
   useEffect(() => {
     saveSettings(s);
@@ -75,6 +111,12 @@ export default function App() {
     if (eng) {
       eng.autoQuality = s.autoQuality;
       if (eng.quality !== s.quality) eng.applyQuality(s.quality);
+      eng.applyCustomization(s.ballStyle, s.gloveStyle);
+    }
+    const eng2 = engine2Ref.current;
+    if (eng2) {
+      if (eng2.quality !== s.quality) eng2.applyQuality(s.quality);
+      eng2.applyCustomization(s.ballStyle, s.gloveStyle);
     }
     net.broadcast({ t: 'lang', lang: s.lang });
   }, [s]);
@@ -91,20 +133,21 @@ export default function App() {
 
   const update = (p: Partial<Settings>) => setS((prev) => ({ ...prev, ...p }));
 
-  const startMatch = useCallback(() => {
+  const startMatch = useCallback((mode: 'classic' | 'challenge' | 'tournament' = matchMode) => {
+    setMatchMode(mode);
+    rewardedRef.current = false;
     audio.unlock();
-    engineRef.current?.startMatch({
-      vsCpu,
-      startBall,
-      rounds: s.rounds,
-      roundTime: s.roundTime,
-      difficulty: s.difficulty,
-    });
+    const rounds = mode === 'challenge' ? 2 : mode === 'tournament' ? 10 : s.rounds;
+    const roundTime = mode === 'challenge' ? 15 : mode === 'tournament' ? 30 : s.roundTime;
+    const base = { startBall, rounds, roundTime, difficulty: s.difficulty };
+    engineRef.current?.startMatch({ ...base, vsCpu: split ? false : vsCpu });
+    if (split) engine2Ref.current?.startMatch({ ...base, vsCpu: false });
     setScreen('game');
-  }, [vsCpu, startBall, s.rounds, s.roundTime, s.difficulty]);
+  }, [vsCpu, split, startBall, s.rounds, s.roundTime, s.difficulty, matchMode]);
 
   const toMenu = useCallback(() => {
     engineRef.current?.quitToMenu();
+    engine2Ref.current?.quitToMenu();
     setScreen('menu');
     audio.startMusic();
   }, []);
@@ -112,14 +155,31 @@ export default function App() {
   // ===== التنقل في القوائم بيد التحكم (للتلفزيون) =====
   const backRef = useRef<() => void>(() => {});
   backRef.current = () => {
-    if (screen === 'howto' || screen === 'settings' || screen === 'lobby') setScreen('menu');
+    if (screen === 'howto' || screen === 'settings' || screen === 'shop' || screen === 'lobby') setScreen('menu');
   };
   useEffect(() => {
+    const isPlaying = () =>
+      screen === 'game' &&
+      !(hudRef.current?.paused || hudRef.current?.phase === 'gameOver' || (splitRef.current && (hud2Ref.current?.paused || hud2Ref.current?.phase === 'gameOver')));
+    const moveFocus = (d: number) => {
+      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]')).filter((e) => e.offsetParent !== null);
+      if (!els.length) return;
+      const i = els.indexOf(document.activeElement as HTMLElement);
+      els[(i + d + els.length) % els.length].focus();
+    };
+    // التنقل في القوائم من التلفون (أزرار ▲ ▼ OK ↩)
+    const onPhoneNav = (k: string) => {
+      if (isPlaying()) return;
+      if (k === 'up') moveFocus(-1);
+      else if (k === 'down') moveFocus(1);
+      else if (k === 'ok') (document.activeElement as HTMLElement | null)?.click();
+      else if (k === 'back') backRef.current();
+    };
+    net.navListeners.add(onPhoneNav);
     let prev = { up: false, down: false, a: false, b: false };
     const seen = new Set<number>();
     const id = window.setInterval(() => {
-      const inGame = screen === 'game' && !(hudRef.current?.paused || hudRef.current?.phase === 'gameOver');
-      if (inGame) return;
+      if (isPlaying()) return;
       let up = false;
       let down = false;
       let a = false;
@@ -166,16 +226,34 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => {
       clearInterval(id);
+      net.navListeners.delete(onPhoneNav);
       window.removeEventListener('keydown', onKey);
     };
   }, [screen]);
   const hudRef = useRef(hud);
   hudRef.current = hud;
+  const hud2Ref = useRef(hud2);
+  hud2Ref.current = hud2;
+  useEffect(() => {
+    if (hud?.phase === 'gameOver' && !rewardedRef.current) {
+      rewardedRef.current = true;
+      const reward = hud.winner >= 0 ? 80 : 30;
+      setS((prev) => ({ ...prev, coins: prev.coins + reward }));
+    }
+  }, [hud?.phase, hud?.winner]);
 
   const L = s.lang;
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-slate-950 text-white" dir={L === 'ar' ? 'rtl' : 'ltr'}>
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+      {/* ملعب واحد، أو ملعبان جنباً إلى جنب (شاشة مقسومة) */}
+      <div className={`absolute inset-0 grid ${split ? 'grid-cols-2 portrait:grid-cols-1 portrait:grid-rows-2' : ''}`} dir="ltr">
+        <div className="relative min-h-0 min-w-0 overflow-hidden">
+          <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+        </div>
+        <div className={`relative min-h-0 min-w-0 overflow-hidden ${split ? 'border-s-4 border-white/40 portrait:border-s-0 portrait:border-t-4' : 'hidden'}`}>
+          <canvas ref={canvas2Ref} className="absolute inset-0 h-full w-full" />
+        </div>
+      </div>
       {screen !== 'game' && <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/20 to-slate-950/70" />}
       <div className="absolute inset-0">
         {screen === 'menu' && (
@@ -183,12 +261,14 @@ export default function App() {
             s={s}
             onPlay={() => setScreen('lobby')}
             onHow={() => setScreen('howto')}
+            onShop={() => setScreen('shop')}
             onSettings={() => setScreen('settings')}
             onLang={() => update({ lang: L === 'ar' ? 'en' : 'ar' })}
           />
         )}
         {screen === 'howto' && <HowTo s={s} onBack={() => setScreen('menu')} />}
         {screen === 'settings' && <SettingsScreen s={s} onChange={update} onBack={() => setScreen('menu')} />}
+        {screen === 'shop' && <ShopScreen s={s} onChange={update} onBack={() => setScreen('menu')} />}
         {screen === 'lobby' && (
           <Lobby
             s={s}
@@ -196,11 +276,13 @@ export default function App() {
             setVsCpu={setVsCpu}
             startBall={startBall}
             setStartBall={setStartBall}
+            split={split}
+            setSplit={setSplit}
             onStart={startMatch}
             onBack={() => setScreen('menu')}
           />
         )}
-        {screen === 'game' && hud && hud.phase !== 'idle' && (
+        {screen === 'game' && !split && hud && hud.phase !== 'idle' && (
           <Hud
             h={hud}
             s={s}
@@ -209,6 +291,38 @@ export default function App() {
             onQuit={toMenu}
             onRestart={startMatch}
           />
+        )}
+        {screen === 'game' && split && (
+          <div className="absolute inset-0 grid grid-cols-2 portrait:grid-cols-1 portrait:grid-rows-2" dir="ltr">
+            <div className="relative min-h-0 min-w-0 overflow-hidden" dir={L === 'ar' ? 'rtl' : 'ltr'}>
+              {hud && hud.phase !== 'idle' && (
+                <Hud
+                  h={hud}
+                  s={s}
+                  slotBase={0}
+                  label={t(L, 'match1')}
+                  onPause={() => engineRef.current?.pause('user')}
+                  onResume={() => engineRef.current?.resume()}
+                  onQuit={toMenu}
+                  onRestart={startMatch}
+                />
+              )}
+            </div>
+            <div className="relative min-h-0 min-w-0 overflow-hidden" dir={L === 'ar' ? 'rtl' : 'ltr'}>
+              {hud2 && hud2.phase !== 'idle' && (
+                <Hud
+                  h={hud2}
+                  s={s}
+                  slotBase={2}
+                  label={t(L, 'match2')}
+                  onPause={() => engine2Ref.current?.pause('user')}
+                  onResume={() => engine2Ref.current?.resume()}
+                  onQuit={toMenu}
+                  onRestart={startMatch}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
       {screen !== 'game' && (

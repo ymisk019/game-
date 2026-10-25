@@ -1,18 +1,23 @@
 // =====================================================================
-//  BALL VS KEEPER — سيرفر الويب (محلي أو Render)
+//  BALL VS KEEPER — السيرفر المحلي
 //  يقدّم ملفات اللعبة (dist/) ويدير غرف WebSocket بين الكونسل والتلفونات.
 //  السيرفر يمرّر المدخلات فقط؛ الفيزياء كلها تُحسب على شاشة الكونسل.
+//  شبكة محلية فقط (نفس الواي فاي) — لا يوجد وضع إنترنت عام.
 //  التشغيل: npm install ثم npm run build ثم node server.js
+//  وضع السيرفر المصغّر:  node server.js --auto
+//    يشتغل مع اللعبة ويطفي نفسه تلقائياً عند إغلاق اللعبة (نافذة المتصفح).
 // =====================================================================
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3000;
+let PORT = Number(process.env.PORT) || 3000;
+const AUTO_EXIT = process.argv.includes('--auto') || process.env.BVK_AUTO_EXIT === '1';
 const DIST = path.join(__dirname, 'dist');
 const PUBLIC = path.join(__dirname, 'public');
 
@@ -30,9 +35,7 @@ function localIPs() {
 }
 const IPS = localIPs();
 const IP = IPS[0] || 'localhost';
-// Render يوفّر رابط الخدمة العام عبر RENDER_EXTERNAL_URL.
-const BASE_URL = (process.env.RENDER_EXTERNAL_URL || `http://${IP}:${PORT}`).replace(/\/$/, '');
-const PUBLIC_PROTO = BASE_URL.startsWith('https://') ? 'wss' : 'ws';
+const baseUrl = () => `http://${IP}:${PORT}`; // دائماً عنوان الشبكة المحلية (وليس localhost) ليعمل مع التلفونات
 
 // ---------- تقديم الملفات الثابتة ----------
 const MIME = {
@@ -77,14 +80,9 @@ function resolveFile(urlPath) {
 
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-  if (urlPath === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'BALL VS KEEPER' }));
-    return;
-  }
   if (urlPath === '/api/info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ip: IP, port: PORT, url: BASE_URL }));
+    res.end(JSON.stringify({ ip: IP, port: PORT, url: baseUrl() }));
     return;
   }
   const file = resolveFile(urlPath);
@@ -104,6 +102,8 @@ const server = http.createServer((req, res) => {
 // ---------- إدارة الغرف ----------
 /** @type {Map<string, {code:string, host:any, pads:Map<string, any>, emptySince:number}>} */
 const rooms = new Map();
+let everHadHost = false;
+let noHostSince = 0; // وقت آخر مرة اختفى فيها الكونسل (للإطفاء التلقائي)
 
 function newCode() {
   let code;
@@ -141,9 +141,11 @@ wss.on('connection', (ws) => {
       }
       room.host = ws;
       room.emptySince = 0;
+      everHadHost = true;
+      noHostSince = 0;
       ws.role = 'host';
       ws.room = room;
-      send(ws, { t: 'room', code: room.code, ip: IP, url: BASE_URL });
+      send(ws, { t: 'room', code: room.code, ip: IP, url: baseUrl() });
       // أبلغ الكونسل بالتلفونات المتصلة مسبقاً (بعد إعادة تحميل الصفحة)
       for (const [id, p] of room.pads) {
         send(ws, { t: 'pad-join', id, name: p.padName, role: p.padRole || null });
@@ -200,6 +202,7 @@ wss.on('connection', (ws) => {
     if (ws.role === 'host' && room.host === ws) {
       room.host = null;
       room.emptySince = Date.now();
+      noHostSince = Date.now();
       for (const p of room.pads.values()) send(p, { t: 'host-lost' });
       console.log(`🖥️  Console left room ${room.code}`);
     } else if (ws.role === 'pad' && room.pads.get(ws.padId) === ws) {
@@ -211,7 +214,7 @@ wss.on('connection', (ws) => {
 });
 
 // نبض دوري لاكتشاف الاتصالات الميتة (تلفون نائم مثلاً) وتنظيف الغرف القديمة
-setInterval(() => {
+const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) {
       ws.terminate();
@@ -225,20 +228,97 @@ setInterval(() => {
     }
   }
   const now = Date.now();
+  if (AUTO_EXIT) {
+    const hasHost = [...rooms.values()].some((r) => r.host && r.host.readyState === 1);
+    if (hasHost) noHostSince = 0;
+    else if (!noHostSince) noHostSince = now;
+    // بعد إغلاق اللعبة بـ 8 ثوانٍ (مهلة لإعادة تحميل الصفحة) أو لو ما فتحت اللعبة أصلاً خلال دقيقتين
+    const grace = everHadHost ? 8000 : 120000;
+    if (!hasHost && now - noHostSince > grace) {
+      console.log('🛑 اللعبة أُغلقت — إيقاف السيرفر المصغّر.');
+      stopServer().then(() => process.exit(0));
+    }
+  }
   for (const [code, r] of rooms) {
     if (!r.host && r.emptySince && now - r.emptySince > 10 * 60 * 1000) rooms.delete(code);
   }
 }, 4000);
 
-server.listen(PORT, '0.0.0.0', () => {
+
+function logBanner() {
   console.log('\n⚽🧤  BALL VS KEEPER — الكرة ضد الحارس');
   console.log('──────────────────────────────────────────');
-  console.log(`🖥️  رابط اللعبة العام:                 ${BASE_URL}`);
-  console.log(`📱  رابط اليد للتلفون:              ${BASE_URL}/pad`);
+  console.log(`🖥️  افتح اللعبة على الشاشة الكبيرة:  ${baseUrl()}`);
+  console.log(`📱  رابط اليد للتلفون:              ${baseUrl()}/pad`);
   if (IPS.length > 1) console.log(`ℹ️   عناوين أخرى: ${IPS.slice(1).join(', ')}`);
   console.log(`💻  على نفس الجهاز:                http://localhost:${PORT}`);
   if (!fs.existsSync(path.join(DIST, 'index.html'))) {
     console.log('\n⚠️  مجلد dist غير موجود — شغّل: npm run build');
   }
+  if (AUTO_EXIT) console.log('🔌 وضع السيرفر المصغّر: يتوقف تلقائياً عند إغلاق اللعبة.');
   console.log('──────────────────────────────────────────\n');
-});
+}
+
+/** تشغيل السيرفر. إذا كان المنفذ مشغولاً يجرّب المنفذ التالي تلقائياً. */
+export function startServer(port = PORT) {
+  return new Promise((resolve, reject) => {
+    let tries = 0;
+    const attempt = (p) => {
+      const onError = (err) => {
+        if (err.code === 'EADDRINUSE' && tries < 20) {
+          tries++;
+          attempt(p + 1);
+        } else reject(err);
+      };
+      server.once('error', onError);
+      server.listen(p, '0.0.0.0', () => {
+        server.off('error', onError);
+        PORT = p;
+        logBanner();
+        resolve({ port: PORT, url: baseUrl(), localUrl: `http://localhost:${PORT}` });
+      });
+    };
+    attempt(port);
+  });
+}
+
+/** إيقاف السيرفر وقطع كل الاتصالات. */
+export function stopServer() {
+  return new Promise((resolve) => {
+    for (const ws of wss.clients) {
+      try {
+        ws.terminate();
+      } catch {
+        /* تجاهل */
+      }
+    }
+    rooms.clear();
+    clearInterval(heartbeat);
+    server.close(() => resolve());
+    setTimeout(resolve, 1500);
+  });
+}
+
+// تشغيل مباشر من سطر الأوامر: node server.js
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function openBrowser(url) {
+  const cmd = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try {
+    spawn(cmd[0], cmd[1], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+  } catch {
+    /* تجاهل */
+  }
+}
+
+if (isMain) {
+  startServer()
+    .then((info) => {
+      if (process.argv.includes('--open')) openBrowser(info.localUrl);
+    })
+    .catch((e) => {
+      console.error('تعذّر تشغيل السيرفر:', e.message);
+      process.exit(1);
+    });
+  process.on('SIGINT', () => stopServer().then(() => process.exit(0)));
+  process.on('SIGTERM', () => stopServer().then(() => process.exit(0)));
+}

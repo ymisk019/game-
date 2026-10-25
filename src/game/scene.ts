@@ -222,6 +222,9 @@ function buildLights(scene: THREE.Scene) {
     lamp.position.set(x, 26.5, z);
     lamp.lookAt(0, 0, 12);
     scene.add(lamp);
+    const glow = new THREE.PointLight(0xffe7b0, 0.65, 38, 2);
+    glow.position.set(x * 0.82, 23, z);
+    scene.add(glow);
   }
 }
 
@@ -231,6 +234,7 @@ export interface KeeperModel {
   armL: THREE.Group;
   armR: THREE.Group;
   bodyMat: THREE.MeshLambertMaterial;
+  gloveMat: THREE.MeshLambertMaterial;
   markers: { obj: THREE.Object3D; r: number }[];
 }
 
@@ -287,7 +291,7 @@ export function buildKeeper(): KeeperModel {
   const armL = mkArm(-1);
   const armR = mkArm(1);
   root.position.set(0, 0, KEEPER_Z);
-  return { root, armL, armR, bodyMat, markers };
+  return { root, armL, armR, bodyMat, gloveMat: glove, markers };
 }
 
 /** الكرة مع نسيج بخماسيات */

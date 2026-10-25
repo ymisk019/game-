@@ -1,0 +1,29 @@
+{
+  "name": "ball-vs-keeper-desktop",
+  "version": "1.0.0",
+  "description": "BALL VS KEEPER — تطبيق سطح المكتب مع سيرفر مصغّر",
+  "author": "Houssam dev",
+  "main": "main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.houssamdev.ballvskeeper",
+    "productName": "Ball vs Keeper",
+    "asar": false,
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "package.json", "app/**/*", "node_modules/**/*"],
+    "win": { "target": ["portable"] },
+    "linux": { "target": ["AppImage"], "category": "Game" },
+    "mac": { "target": ["dmg"], "category": "public.app-category.games" }
+  }
+}

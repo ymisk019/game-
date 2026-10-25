@@ -1,0 +1,9 @@
+{
+  "appId": "com.houssamdev.ballvskeeper",
+  "appName": "Ball vs Keeper Pad",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

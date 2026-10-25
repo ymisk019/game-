@@ -34,7 +34,7 @@
 
   /* ===== شاشة اليد ===== */
   #pad { position: absolute; inset: 0; display: flex; flex-direction: column; }
-  #bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: rgba(15,23,42,.9); border-bottom: 3px solid var(--pc, #f97316); font-weight: 800; }
+  #bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: linear-gradient(100deg, rgba(15,23,42,.98), rgba(30,41,59,.92)); border-bottom: 3px solid var(--pc, #f97316); font-weight: 800; box-shadow: 0 8px 28px #0005; }
   #dot { width: 14px; height: 14px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; }
   #who { color: var(--pc, #f97316); font-size: 18px; }
   #role { padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.12); font-size: 16px; }
@@ -42,28 +42,20 @@
   .iconbtn { border: 0; background: rgba(255,255,255,.12); color: #fff; border-radius: 12px; font-size: 20px; padding: 6px 12px; }
   #area { flex: 1; position: relative; display: flex; direction: ltr; }
   #stickZone { flex: 1; position: relative; }
-  #stickBase { position: absolute; width: clamp(150px, 24vw, 194px); height: clamp(150px, 24vw, 194px); margin: calc(clamp(150px, 24vw, 194px) / -2) 0 0 calc(clamp(150px, 24vw, 194px) / -2); border-radius: 50%; border: 2px solid color-mix(in srgb, var(--pc, #f97316) 70%, white);
-    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.10), rgba(2,6,23,.42) 66%, rgba(2,6,23,.78)); box-shadow: 0 0 0 7px rgba(255,255,255,.035), 0 0 28px color-mix(in srgb, var(--pc, #f97316) 40%, transparent), inset 0 0 24px rgba(255,255,255,.06); left: 30%; top: 55%; pointer-events: none; backdrop-filter: blur(8px); }
-  #stickBase::before { content: ""; position: absolute; inset: 14px; border: 1px dashed rgba(255,255,255,.18); border-radius: 50%; }
-  #stickBase::after { content: "✦"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,.15); font-size: 44px; }
-  .stick-dir { position: absolute; color: rgba(255,255,255,.58); font-size: 17px; font-weight: 900; text-shadow: 0 0 8px var(--pc, #f97316); }
-  .stick-dir.up { top: 7px; left: 50%; transform: translateX(-50%); }
-  .stick-dir.down { bottom: 7px; left: 50%; transform: translateX(-50%); }
-  .stick-dir.left { left: 8px; top: 50%; transform: translateY(-50%); }
-  .stick-dir.right { right: 8px; top: 50%; transform: translateY(-50%); }
-  #stickKnob { position: absolute; width: clamp(66px, 10vw, 84px); height: clamp(66px, 10vw, 84px); margin: calc(clamp(66px, 10vw, 84px) / -2) 0 0 calc(clamp(66px, 10vw, 84px) / -2); border-radius: 50%; left: 50%; top: 50%;
-    border: 3px solid rgba(255,255,255,.78); background: radial-gradient(circle at 32% 24%, #fff, color-mix(in srgb, var(--pc, #f97316) 88%, white) 24%, var(--pc, #f97316) 72%, #111827 120%); box-shadow: 0 7px 0 rgba(0,0,0,.38), 0 0 0 5px rgba(255,255,255,.07), 0 0 26px color-mix(in srgb, var(--pc, #f97316) 68%, transparent), inset 0 -8px 15px rgba(0,0,0,.25); transition: box-shadow .12s, filter .12s; }
-  #stickBase.active #stickKnob { filter: brightness(1.18); box-shadow: 0 3px 0 rgba(0,0,0,.35), 0 0 0 7px rgba(255,255,255,.12), 0 0 34px color-mix(in srgb, var(--pc, #f97316) 85%, transparent); }
-  #stickHint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #cbd5e1; font-weight: 800; font-size: 12px; letter-spacing: .04em; pointer-events: none; text-shadow: 0 2px 8px #000; }
+  #stickBase { position: absolute; width: 184px; height: 184px; margin: -92px 0 0 -92px; border-radius: 50%; border: 3px solid rgba(255,255,255,.32);
+    background: radial-gradient(circle, rgba(255,255,255,.12), rgba(255,255,255,.025)); box-shadow: inset 0 0 28px #0005, 0 10px 35px #0004; left: 30%; top: 55%; pointer-events: none; }
+  #stickKnob { position: absolute; width: 86px; height: 86px; margin: -43px 0 0 -43px; border-radius: 50%; left: 50%; top: 50%; border: 2px solid #ffffff66;
+    background: radial-gradient(circle at 35% 30%, #fff9, var(--pc, #f97316)); box-shadow: 0 6px 24px rgba(0,0,0,.55), inset 0 2px 8px #fff5; will-change: transform; }
+  #stickHint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #64748b; font-weight: 700; pointer-events: none; }
   #btnZone { flex: 1; position: relative; }
-  .pbtn { position: absolute; border-radius: 50%; border: 0; color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-direction: column;
-    border: 2px solid rgba(255,255,255,.7); box-shadow: 0 8px 0 rgba(0,0,0,.38), 0 10px 30px rgba(0,0,0,.4), inset 0 2px 8px rgba(255,255,255,.42), 0 0 24px rgba(255,255,255,.12); transition: transform .08s, opacity .2s, filter .2s; touch-action: none; line-height: 1.1; backdrop-filter: blur(5px); text-shadow: 0 2px 4px rgba(0,0,0,.4); }
+  .pbtn { position: absolute; border-radius: 50%; border: 2px solid #ffffff55; color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-direction: column;
+    box-shadow: 0 8px 0 rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.4), inset 0 3px 12px #ffffff30; transition: transform .05s, opacity .2s, filter .2s; touch-action: none; line-height: 1.1; user-select:none; -webkit-user-select:none; }
   .pbtn span { font-size: 34px; }
   .pbtn.down { transform: translateY(6px) scale(.95); box-shadow: 0 2px 0 rgba(0,0,0,.35); filter: brightness(1.25); }
   .pbtn.dim { opacity: .35; }
-  #bShoot { width: clamp(124px, 19vw, 158px); height: clamp(124px, 19vw, 158px); right: 8%; bottom: 14%; background: radial-gradient(circle at 35% 30%, #86efac, #16a34a); font-size: 20px; }
-  #bJump { width: clamp(94px, 14vw, 116px); height: clamp(94px, 14vw, 116px); right: 12%; top: 8%; background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626); font-size: 18px; }
-  #bDive { width: clamp(102px, 16vw, 126px); height: clamp(102px, 16vw, 126px); right: 52%; bottom: 10%; background: radial-gradient(circle at 35% 30%, #93c5fd, #2563eb); font-size: 18px; }
+  #bShoot { width: 150px; height: 150px; right: 8%; bottom: 14%; background: radial-gradient(circle at 35% 30%, #86efac, #16a34a); font-size: 20px; }
+  #bJump { width: 110px; height: 110px; right: 12%; top: 8%; background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626); font-size: 18px; }
+  #bDive { width: 120px; height: 120px; right: 52%; bottom: 10%; background: radial-gradient(circle at 35% 30%, #93c5fd, #2563eb); font-size: 18px; }
   @media (orientation: portrait) {
     #area { flex-direction: column-reverse; }
     #bShoot { width: 130px; height: 130px; right: 8%; bottom: 10%; }
@@ -74,6 +66,12 @@
   #overlay { position: absolute; inset: 0; background: rgba(2,6,23,.85); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; font-size: 24px; font-weight: 800; text-align: center; padding: 20px; z-index: 5; }
   .spin { width: 48px; height: 48px; border: 6px solid #334155; border-top-color: #fbbf24; border-radius: 50%; animation: sp 1s linear infinite; }
   @keyframes sp { to { transform: rotate(360deg); } }
+  #navBar { position: absolute; inset: 0; top: 56px; z-index: 5; background: rgba(2,6,23,.94); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }
+  #navBar .row { display: flex; gap: 14px; direction: ltr; }
+  #navBar button { width: 110px; height: 90px; border: 0; border-radius: 22px; font-size: 38px; font-weight: 900; color: #fff; background: #1e293b; box-shadow: 0 6px 0 #0008; }
+  #navBar button:active { transform: translateY(4px); box-shadow: 0 2px 0 #0008; }
+  #navBar button.ok { background: linear-gradient(#fbbf24, #f97316); color: #0f172a; width: 160px; }
+  #navBar .tip { color: #94a3b8; font-weight: 700; text-align: center; }
   #rolePick { display: flex; gap: 8px; }
   #rolePick button { border: 0; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.12); color: #fff; font-weight: 800; font-size: 15px; }
   #rolePick button.on { background: var(--pc, #f97316); color: #0f172a; }
@@ -87,6 +85,7 @@
     <h1 data-t="title"></h1>
     <div class="sub" data-t="sub"></div>
     <div class="field"><label data-t="code"></label><input id="code" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="0000" /></div>
+    <div class="field hidden" id="hostField"><label data-t="hostLbl"></label><input id="host" inputmode="decimal" autocomplete="off" placeholder="192.168.1.20:3000" style="font-size:22px;letter-spacing:0" /></div>
     <div class="field"><label data-t="name"></label><input id="name" maxlength="16" autocomplete="off" /></div>
     <div class="roles"><button id="rBall" data-t="rBall"></button><button id="rKeeper" data-t="rKeeper"></button></div>
     <button class="big" id="go" data-t="join"></button>
@@ -105,12 +104,17 @@
       <button class="iconbtn" id="pauseBtn">⏸️</button>
     </div>
     <div id="area">
-      <div id="stickZone"><div id="stickBase"><span class="stick-dir up">▲</span><span class="stick-dir down">▼</span><span class="stick-dir left">◀</span><span class="stick-dir right">▶</span><div id="stickKnob"></div></div><div id="stickHint" data-t="stick"></div></div>
+      <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div><div id="stickHint" data-t="stick"></div></div>
       <div id="btnZone">
         <button class="pbtn" id="bJump"><span>⤒</span><b data-t="jump"></b></button>
         <button class="pbtn" id="bDive"><span>↘</span><b data-t="dive"></b></button>
         <button class="pbtn" id="bShoot"><span>⚽</span><b data-t="shoot"></b></button>
       </div>
+    </div>
+    <div id="navBar" class="hidden">
+      <div class="tip" data-t="navTip"></div>
+      <div class="row"><button id="nUp">▲</button><button id="nDown">▼</button></div>
+      <div class="row"><button id="nBack">↩</button><button id="nOk" class="ok">OK</button></div>
     </div>
     <div id="overlay" class="hidden"><div class="spin"></div><div id="ovText"></div></div>
   </div>
@@ -120,9 +124,9 @@
   // ===================== النصوص (عربي / إنجليزي) =====================
   const T = {
     ar: { title: 'الكرة ضد الحارس', sub: 'يد التحكم بالتلفون', code: 'رمز الغرفة (4 أرقام)', name: 'اسمك', rBall: '⚽ الكرة', rKeeper: '🧤 الحارس', join: 'انضمام', shoot: 'تسديد', jump: 'قفز', dive: 'غطس', stick: 'اسحب هنا للحركة',
-      p1: 'اللاعب 1', p2: 'اللاعب 2', ball: '⚽ الكرة', keeper: '🧤 الحارس', lobby: '⏳ الانتظار', reconnecting: 'انقطع الاتصال… جاري إعادة الاتصال', hostLost: 'شاشة اللعبة غير متصلة… بانتظارها', badRoom: 'رمز الغرفة غير صحيح', needCode: 'أدخل رمز الغرفة', connecting: 'جاري الاتصال…' },
+      p1: 'اللاعب 1', p2: 'اللاعب 2', p3: 'اللاعب 3', p4: 'اللاعب 4', hostLbl: 'عنوان جهاز اللعبة (مثال 192.168.1.20:3000)', needHost: 'اكتب عنوان جهاز اللعبة الظاهر في غرفة الانتظار', navTip: 'تحكّم بالقوائم من هنا', ball: '⚽ الكرة', keeper: '🧤 الحارس', lobby: '⏳ الانتظار', reconnecting: 'انقطع الاتصال… جاري إعادة الاتصال', hostLost: 'شاشة اللعبة غير متصلة… بانتظارها', badRoom: 'رمز الغرفة غير صحيح', needCode: 'أدخل رمز الغرفة', connecting: 'جاري الاتصال…' },
     en: { title: 'BALL VS KEEPER', sub: 'Phone controller', code: 'Room code (4 digits)', name: 'Your name', rBall: '⚽ Ball', rKeeper: '🧤 Keeper', join: 'Join', shoot: 'SHOOT', jump: 'JUMP', dive: 'DIVE', stick: 'Drag here to move',
-      p1: 'Player 1', p2: 'Player 2', ball: '⚽ Ball', keeper: '🧤 Keeper', lobby: '⏳ Lobby', reconnecting: 'Connection lost… reconnecting', hostLost: 'Game screen offline… waiting', badRoom: 'Wrong room code', needCode: 'Enter the room code', connecting: 'Connecting…' }
+      p1: 'Player 1', p2: 'Player 2', p3: 'Player 3', p4: 'Player 4', hostLbl: 'Game device address (e.g. 192.168.1.20:3000)', needHost: 'Enter the game device address shown in the lobby', navTip: 'Control the menus from here', ball: '⚽ Ball', keeper: '🧤 Keeper', lobby: '⏳ Lobby', reconnecting: 'Connection lost… reconnecting', hostLost: 'Game screen offline… waiting', badRoom: 'Wrong room code', needCode: 'Enter the room code', connecting: 'Connecting…' }
   };
   const $ = (id) => document.getElementById(id);
   let lang = localStorage.getItem('bvk_pad_lang') || ((navigator.language || '').startsWith('ar') ? 'ar' : 'en');
@@ -146,7 +150,11 @@
   let slot = -1, role = 'lobby', score = [0, 0];
   let ws = null, joined = false, wantJoin = false, retry = 0, hostOnline = true;
   const input = { x: 0, y: 0, s: false, j: false, d: false };
-  const COLORS = ['#f97316', '#3b82f6'];
+  const COLORS = ['#f97316', '#3b82f6', '#22c55e', '#e879f9'];
+  let phase = 'idle';
+  // وضع التطبيق (Capacitor): الصفحة محلية داخل التطبيق فنحتاج عنوان جهاز اللعبة
+  const APP = !!window.Capacitor || location.protocol === 'file:' || location.protocol === 'capacitor:' || (location.hostname === 'localhost' && !location.port);
+  if (APP) { $('hostField').classList.remove('hidden'); $('host').value = localStorage.getItem('bvk_pad_host') || ''; }
 
   function setRolePref(r) {
     rolePref = r; localStorage.setItem('bvk_pad_role', r);
@@ -162,10 +170,11 @@
   function renderBar() {
     const c = COLORS[slot] || '#94a3b8';
     document.documentElement.style.setProperty('--pc', c);
-    $('who').textContent = slot === 0 ? tr('p1') : slot === 1 ? tr('p2') : '';
+    $('who').textContent = slot >= 0 && slot < 4 ? tr('p' + (slot + 1)) : '';
     $('role').textContent = tr(role === 'ball' ? 'ball' : role === 'keeper' ? 'keeper' : 'lobby');
     $('score').textContent = role === 'lobby' ? '' : score[0] + ' - ' + score[1];
     $('rolePick').classList.toggle('hidden', role !== 'lobby');
+    $('navBar').classList.toggle('hidden', !(role === 'lobby' || phase === 'gameOver'));
     // تمييز الأزرار حسب الدور
     $('bShoot').classList.toggle('dim', role === 'keeper');
     $('bJump').classList.toggle('dim', role === 'ball');
@@ -179,8 +188,15 @@
   function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
   function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(proto + '://' + location.host + '/ws');
+    let url;
+    if (APP) {
+      let h = $('host').value.trim().replace(/^(https?|wss?):\/\//, '').replace(/\/.*$/, '');
+      if (h && !/:\d+$/.test(h)) h += ':3000';
+      url = 'ws://' + h + '/ws';
+    } else {
+      url = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+    }
+    try { ws = new WebSocket(url); } catch (e) { retry++; setTimeout(connect, Math.min(4000, 500 * retry)); return; }
     ws.onopen = () => {
       retry = 0;
       if (wantJoin) send({ t: 'join', code: $('code').value.trim(), id, name: $('name').value.trim(), role: rolePref });
@@ -201,7 +217,7 @@
           $('err').textContent = tr('badRoom');
           break;
         case 'slot': slot = m.slot; renderBar(); break;
-        case 'state': role = m.role; score = m.score || score; if (typeof m.me === 'number') slot = m.me; renderBar(); break;
+        case 'state': role = m.role; phase = m.phase || phase; score = m.score || score; if (typeof m.me === 'number') slot = m.me; renderBar(); break;
         case 'vib': vib(m.p); break;
         case 'lang': if (T[m.lang] && !localStorage.getItem('bvk_pad_lang')) { lang = m.lang; applyLang(); } break;
         case 'host-lost': hostOnline = false; showOverlay(tr('hostLost')); break;
@@ -228,11 +244,21 @@
     if (!/^\d{4}$/.test(code)) { $('err').textContent = tr('needCode'); return; }
     $('err').textContent = '';
     localStorage.setItem('bvk_pad_name', $('name').value.trim());
+    if (APP) {
+      if (!$('host').value.trim()) { $('err').textContent = tr('needHost'); return; }
+      localStorage.setItem('bvk_pad_host', $('host').value.trim());
+      wantJoin = true;
+      if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} ws = null; }
+      retry = 0; connect();
+      return;
+    }
     wantJoin = true;
     if (ws && ws.readyState === 1) send({ t: 'join', code, id, name: $('name').value.trim(), role: rolePref });
     else if (!ws) connect();
   }
   $('go').onclick = doJoin;
+  // أزرار التنقل في القوائم (غرفة الانتظار / نهاية المباراة)
+  [['nUp', 'up'], ['nDown', 'down'], ['nOk', 'ok'], ['nBack', 'back']].forEach(([b, k]) => { $(b).onclick = () => { send({ t: 'nav', k }); vib(15); }; });
 
   // ===================== اهتزاز وشاشة دائمة التشغيل =====================
   function vib(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -245,11 +271,9 @@
   const zone = $('stickZone'), base = $('stickBase'), knob = $('stickKnob');
   let stickId = null, ox = 0, oy = 0;
   const R = 70;
-  const DEAD_ZONE = 0.08;
   zone.addEventListener('pointerdown', (e) => {
     if (stickId !== null) return;
     stickId = e.pointerId; zone.setPointerCapture(e.pointerId);
-    base.classList.add('active');
     const r = zone.getBoundingClientRect();
     ox = e.clientX; oy = e.clientY;
     base.style.left = (e.clientX - r.left) + 'px'; base.style.top = (e.clientY - r.top) + 'px';
@@ -260,10 +284,15 @@
     const d = Math.hypot(dx, dy);
     if (d > R) { dx = dx / d * R; dy = dy / d * R; }
     knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-    input.x = Math.abs(dx / R) < DEAD_ZONE ? 0 : +(dx / R).toFixed(2); input.y = Math.abs(dy / R) < DEAD_ZONE ? 0 : +(-dy / R).toFixed(2);
+    let nx = dx / R, ny = -dy / R;
+    // Dead-zone near the center prevents unwanted drift on touchscreens.
+    const mag = Math.hypot(nx, ny);
+    if (mag < 0.09) { nx = 0; ny = 0; }
+    else { const scaled = Math.min(1, (mag - 0.09) / 0.91) / mag; nx *= scaled; ny *= scaled; }
+    input.x = +nx.toFixed(3); input.y = +ny.toFixed(3);
   }
   zone.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e); });
-  const endStick = (e) => { if (e.pointerId !== stickId) return; stickId = null; input.x = 0; input.y = 0; knob.style.transform = ''; base.classList.remove('active'); };
+  const endStick = (e) => { if (e.pointerId !== stickId) return; stickId = null; input.x = 0; input.y = 0; knob.style.transform = ''; };
   zone.addEventListener('pointerup', endStick);
   zone.addEventListener('pointercancel', endStick);
 
@@ -298,7 +327,7 @@
   document.addEventListener('touchmove', (e) => { if (!e.target.closest('#join')) e.preventDefault(); }, { passive: false });
 
   applyLang();
-  connect();
+  if (!APP) connect();
   // انضمام تلقائي إذا جاء الرمز من QR
   if (params.get('room')) { wantJoin = true; }
 })();
